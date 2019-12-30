@@ -33,7 +33,7 @@ import copy
 
 import datetime
 def s2d(sd):
-    """ Convert stat time to datetime """
+    """ Convert file stat time to datetime """
     return datetime.datetime.fromtimestamp(sd)
 
 import iso8601 # dependency
@@ -41,6 +41,11 @@ from six import string_types, itervalues # dependency
 
 import random    
 
+## Configuration
+TODO
+
+## Logger
+TODO
         
 class Metadata:
     """
