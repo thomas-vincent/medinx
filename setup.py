@@ -2,6 +2,8 @@
 
 from setuptools import setup
 
+# scripts = ['scripts/lsx', 'scripts/cdx', 'scripts/treex']
+scripts = []
 setup(name='medinx',
       version='0.1',
       description='metadata file manager',
@@ -11,7 +13,7 @@ setup(name='medinx',
       packages=['medinx'],      
       package_dir={'': 'python'},
       license='GPL3',
-      scripts=['scripts/lsx', 'scripts/cdx', 'scripts/treex'],
+      scripts=scripts,
       classifiers=[
           "Development Status :: 3 - Alpha",
           "Environment :: Console",
