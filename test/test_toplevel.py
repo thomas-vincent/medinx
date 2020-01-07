@@ -25,6 +25,7 @@ import json
 import jsonschema
 import iso8601
 from iso8601 import parse_date
+from itertools import chain
 
 import medinx
 from medinx._medinx import MDF_JSON_SCHEMA
@@ -108,9 +109,22 @@ class TopLevelAPITest(unittest.TestCase):
                         values[iv] = parse_date(v[1:])
                     
             self.assertTrue(op.exists(file_fn))
-            if len(mdata)>0:
-                self.assertEqual(index_main.get_metadata(file_fn), mdata)
+            self.assertEqual(index_main.get_metadata(file_fn), mdata)
 
+    def test_get_attributes(self):
+        test_data = [('doc1.doc', {'author':['me'],
+                                   'reviewed':[True],
+                                   'rating':[1.2],
+                                   'review_date':[parse_date('2016-02-01')]}),
+                     ('table.csv', {'author':['somebody'],
+                                    'rating':[5.0],
+                                    'reviewed':[False],
+                                    'review_date':[parse_date('2016-02-01T12:12')]})]
+        index_main = medinx.MetadataIndex(test_data)
+
+        self.assertEqual(index_main.get_attributes(),
+                         sorted(list(set(chain(*[md.keys() for fn, md in test_data])))))
+            
     def test_filter_equality(self):
         test_data = [('doc1.doc', {'author':['me'],
                                    'reviewed':[True],
