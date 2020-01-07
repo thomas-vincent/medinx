@@ -11,17 +11,17 @@ from PyQt5 import QtWidgets
 import sys
 
 def main():
-    tmp_dir = tempfile.mkdtemp(prefix='medinx_tmp_')
-    if op.exists(tmp_dir):
-        shutil.rmtree(tmp_dir)
-        
-    dump_test_files(tmp_dir)
+    # tmp_dir = tempfile.mkdtemp(prefix='medinx_tmp_')
+    tmp_dir = '/home/tom/test/medinx/'
+
+    if not op.exists(tmp_dir):
+        dump_test_files(tmp_dir)
     app = QtWidgets.QApplication(sys.argv)
     main_widget = mdx_ui.MdataTableEditorMain(tmp_dir)
     main_widget.show()
     sys.exit(app.exec_())
     
-    shutil.rmtree(tmp_dir)
+    # shutil.rmtree(tmp_dir)
     
 def dump_test_files(tmp_dir):
     test_data = [
@@ -42,7 +42,7 @@ def dump_test_files(tmp_dir):
             ('research/bibliography/music/goofiest_music_of_all_times.pdf',
              {'author': ['jean-philippe_herbien'],
               'publication_year': [2009]}),
-            ('research/projects/big_one/bibliography/.pdf', {}),
+            ('research/projects/big_one/bibliography/hahaha.pdf', {}),
             ('administration/condo_NY/meetings/annual_assembly_2017_09_01.docx',
              {'date': ['#2017-09-01T18:30']}),
             ('administration/condo/meetings/annual_assembly_2016_08_27.docx',

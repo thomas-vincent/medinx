@@ -16,9 +16,9 @@ class MdataTableEditorMain(QtWidgets.QWidget):
     def __init__(self, folder_to_parse, *args):
         QtWidgets.QWidget.__init__(self, *args)
 
-        tablemodel = MdataTableModel(parse_folder(folder_to_parse), self)
+        self.tablemodel = MdataTableModel(parse_folder(folder_to_parse), self)
         tableview = QtWidgets.QTableView()
-        tableview.setModel(tablemodel)
+        tableview.setModel(self.tablemodel)
         delegate = MdataTableCellDelegate()
         tableview.setItemDelegate(delegate)
 
@@ -26,6 +26,21 @@ class MdataTableEditorMain(QtWidgets.QWidget):
         layout.addWidget(tableview)
         self.setLayout(layout)
 
+        self.shortcut = QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+S"), self)
+        self.shortcut.activated.connect(self.tablemodel.on_save)
+
+    def closeEvent(self, event):
+
+        quit_msg = "Save?"
+        reply = QtWidgets.QMessageBox.question(self, 'Message', quit_msg,
+                                               QtWidgets.QMessageBox.Yes,
+                                               QtWidgets.QMessageBox.No)
+    
+        if reply == QtWidgets.QMessageBox.Yes:
+            self.tablemodel.on_save()
+            
+        event.accept()
+            
 class MdataTableCellDelegate(QtWidgets.QStyledItemDelegate):
     """ Show previous text while editing """
     
@@ -37,7 +52,6 @@ class MdataTableCellDelegate(QtWidgets.QStyledItemDelegate):
         editor.setText(text)         
 
         
-
 class MdataTableModel(QtCore.QAbstractTableModel):
     def __init__(self, mdata_index, parent=None, *args):
         QtCore.QAbstractTableModel.__init__(self, parent, *args)
@@ -94,3 +108,7 @@ class MdataTableModel(QtCore.QAbstractTableModel):
             # self.dataChanged.emit(index, index)
             return True
         return False
+
+    @QtCore.pyqtSlot()
+    def on_save(self):
+        self.mdata_index.save()

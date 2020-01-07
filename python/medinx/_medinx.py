@@ -54,7 +54,7 @@ def parse_folder(path):
 def _load_metadata(md_fn):
     """
     Load metadata from JSON file and ensure that the associated file or folder
-    exists. Also add filesystem metada: 
+    exists. Also add filesystem metada (TODO): 
         - file_type (either 'file' or 'folder')
         - file_modification_date (datetime object)
 
@@ -69,6 +69,16 @@ def _load_metadata(md_fn):
     
     return (associated_fn, md)
             
+def _save_metadata(md_fn, md):
+    formatted_md = {}
+    for a,vs in md.items():
+        if isinstance(vs[0], datetime):
+            vs = [format_value_date(v) for v in vs]
+        formatted_md[a] = vs
+
+    with open(md_fn, 'w', encoding='utf-8') as fout:
+        json.dump(formatted_md, fout, ensure_ascii=False, indent=4)
+
 def load_json(json_content):
     """
     Load and check that json content complies with medinx format.
@@ -155,8 +165,11 @@ def format_values_str(values):
 def format_values_bool(values):
     return format_str_list(['%s'%v for v in values])
 
+def format_value_date(value):
+    return '#' + value.isoformat('T')
+
 def format_values_date(values):
-    return format_str_list(['#' + v.isoformat('T') for v in values])
+    return format_str_list([format_value_date(v) for v in values])
 
 def format_values(values):
     """
@@ -304,7 +317,17 @@ class MetadataIndex:
                 md[attr] = values
                 return
         raise FileNotFoundError(fn)
-            
+
+    def save(self):
+        """
+        Save metadata in .mdf files.
+        """
+        
+        for fn, md in self._file_table:
+            if len(md) > 0:
+                mdf_fn = fn + MDF_EXTENSION
+                _save_metadata(mdf_fn, md)
+                
     ## Query ##
     
     def filter(self, criteria):
