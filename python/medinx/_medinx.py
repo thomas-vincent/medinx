@@ -8,6 +8,7 @@ import iso8601
 from datetime import datetime
 from iso8601 import parse_date
 
+import warnings
 import logging
 logger = logging.getLogger('medinx')
 
@@ -72,13 +73,16 @@ def load_json(json_content):
     """
     Load and check that json content complies with medinx format.
     Raise InvalidJson<...> exceptions if not.
+
+    Args:
+        - json_content (str): raw json content, MDF format
     """
     def dict_read(pairs):
         """ Simply check for duplicate attributes """
         d = {}
         duplicates = []
         for attribute, values in pairs:
-            if attribute in seen:
+            if attribute in d:
                 duplicates.append(attribute)
             d[attribute] = values
             
@@ -95,6 +99,7 @@ def load_json(json_content):
         Check that type is homogeneous for all values in array associated to
         any attribute.
         """
+        
         errors = []
         for attribute, values in mdata.items():
             fixed_values = []
@@ -130,19 +135,82 @@ def load_json(json_content):
             
         return mdata
 
-    loaded = json.loads(json_content)
+    loaded = json.loads(json_content, object_pairs_hook=dict_read)
     jsonschema.validate(loaded, MDF_JSON_SCHEMA)
 
     return fix_type(loaded)
 
+
+## Formatting and unformatting functions
+
+def format_str_list(l):
+    return '[' + ', '.join(l) + ']'
+
+def format_values_float(values):
+    return format_str_list(['%s'%v for v in values])
+
+def format_values_str(values):
+    return format_str_list(values)
+
+def format_values_bool(values):
+    return format_str_list(['%s'%v for v in values])
+
+def format_values_date(values):
+    return format_str_list(['#' + v.isoformat('T') for v in values])
+
+def format_values(values):
+    """
+    WARNING: type unsafe
+    ASSUME: all values are of the same type (not checked).
+    """
+    if len(values) == 0:
+        return format_values_str([])
+    
+    if isinstance(values[0], float):
+        return format_values_float(values)
+    elif isinstance(values[0], bool):
+        return format_values_bool(values)
+    elif isinstance(values[0], str):
+        return format_values_str(values)
+    elif isinstance(values[0], datetime):
+        return format_values_date(values)
+    else:
+        raise TypeError('Unsupported type %s' % str(type(values[0])))
+
+def unformat_str_list(s):
+    return [e.strip() for e in s.strip('[]').split(',') if len(e) > 0]
+    
+def unformat_values_float(s):
+    return [float(v) for v in unformat_str_list(s)]
+
+def unformat_values_str(values):
+    return unformat_str_list(values)
+
+def unformat_values_bool(values):
+    return [v.lower()=='true' for v in unformat_str_list(values)]
+
+def unformat_values_date(values):
+    return [parse_date(v.strip('#')) for v in unformat_str_list(values)]
+
+unformatters = {
+    str : unformat_values_str,
+    float : unformat_values_float,
+    bool : unformat_values_bool,
+    datetime : unformat_values_date,
+}
+def unformat_values(values, attribute_type):
+    try:
+        return unformatters[attribute_type](values)
+    except KeyError:
+        raise TypeError('Unsupported type %s' % str(attribute_type))
+    
+## Main class 
 class MetadataIndex:
     """
     Metadata index for pathes and associated metadata.
     Can be filtered according to criteria on metadata.
 
     Parts of the specification that are not supported:
-    - The type of an attribute is specific to each entry, whereas it should forced to be 
-      the same for all entries.
     - value-based search with negation.
     - file-system metadata are not extracted
     - tree-view is not implemented
@@ -160,28 +228,84 @@ class MetadataIndex:
         '!=' : lambda v,tv: v!=tv,
 #        '!' : lambda v,tv: str(v)!=str(tv), # value-based search (negation)
     }
+
     
     def __init__(self, path_and_mdata_list):
         """ IMPORTANT: given path_and_mdata_list is not checked for type consistency etc. """
         self._file_table = path_and_mdata_list
 
+        self.attribute_types = {}
+        for fn, md in self._file_table:
+            for attr, values in md.items():
+                if len(values) > 0:
+                    if attr in self.attribute_types and \
+                       self.attribute_types[attr] != type(values[0]):
+                            msg = 'Inconsistent Value type for %s of file %s. ' \
+                                  'Should be %s instead of %s' % \
+                                  (attr, fn, self.attribute_types[attr], type(values[0]))
+                            raise InconsistentValue(msg)
+                    elif self.attribute_types.get(attr, None) is None:
+                        self.attribute_types[attr] = type(values[0])
+                else:
+                    self.attribute_types[attr] = None
+
+        if any([atype is None for atype in self.attribute_types.values()]):
+            logger.warn('No value associated with attribute %s for any file.' % atype)
+            
     @staticmethod
     def from_folder(path):
 
-        # Ensure path exists
         if not op.exists(path):
             raise FileNotFoundError(path)
-        
+
+        # Recursively walk path and extract metadata from each .mdf file found
         file_table = []
         for root, dirs, bfns in os.walk(path):
             for bfn in bfns:
                 if bfn.endswith(MDF_EXTENSION):
                     file_table.append(_load_metadata(op.join(root, bfn)))
         return MetadataIndex(file_table)
+
+    def get_attributes(self):
+        return sorted(self.attribute_types.keys())
+
+    def get_attribute_types(self):
+        return self.attribute_types
     
     def get_files(self):
         """ Return all indexed files names """
         return [fn for fn, md in self._file_table]
+
+    def get_metadata(self, fn):
+        for _fn, md in self._file_table:
+            if _fn == fn:
+                return md
+        return {}
+
+    def set_metadata_attr(self, fn, attr, values):
+
+        # Check that all given value have same type:
+        if any(type(v) != type(values[0]) for v in values):
+            raise InconsistentValue('Non-homogeneous type in given values.')
+
+        for _fn, md in self._file_table:
+            if _fn == fn:
+                if len(values) > 0:
+                    # If new or undefined attribute:
+                    if self.attribute_types.get(attr, None) is None:
+                        self.attribute_types[attr] = type(values[0])
+
+                    # Check type consistency:
+                    if self.attribute_types[attr] != type(values[0]):
+                        msg = 'Inconsistent value type: %s. Should be %s' % \
+                              (str(type(values[0])), str(self.attribute_types[attr]))
+                        raise InconsistentValue(msg)
+                    
+                md[attr] = values
+                return
+        raise FileNotFoundError(fn)
+            
+    ## Query ##
     
     def filter(self, criteria):
         """ Return a filtered view of the index.
@@ -206,7 +330,7 @@ class MetadataIndex:
                         predicate_valid[-1] = True
                         break
                     else:
-                        logger.debug('    -> NOT OK') 
+                        logger.debug('    -> NO MATCH') 
                 if not predicate_valid[-1]:
                     break
             if all(predicate_valid):
@@ -252,12 +376,6 @@ class MetadataIndex:
         
         return Predicate(queried_attribute, queried_value, attribute_matches, value_matches)
     
-    def get_metadata(self, fn):
-        for _fn, md in self._file_table:
-            if _fn == fn:
-                return md
-        return {}
-
 class Predicate:
     def __init__(self, queried_attribute, queried_value, attribute_matches, value_matches):
         """
